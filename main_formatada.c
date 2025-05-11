@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -63,34 +62,42 @@ void init_fila(fila_fifo_t *f) {
     }
 }
 
-void inicia_uso(int recurso, fila_fifo_t *f, int Pi) {
-    sem_wait(&f->mutex);
+void inicia_uso(fila_fifo_t *f, int Pi) {
+    sem_wait(&f->mutex);  // Protege a fila durante o acesso
+
+    // Se o recurso não está sendo usado e a fila está vazia, o processo pode usar o recurso
     if (f->usando == 0 && f->inicio == f->fim) {
-        f->usando = 1;
-        sem_post(&f->mutex);
+        f->usando = 1;  // Marca que o recurso está sendo usado
+        sem_post(&f->mutex);  // Libera a fila
     } else {
+        // Caso o recurso esteja sendo usado, coloca o processo na fila
         f->fila[f->fim] = Pi;
-        f->fim = (f->fim + 1) % MAX_PROCESSOS;
-        sem_post(&f->mutex);
+        f->fim = (f->fim + 1) % MAX_PROCESSOS;  // Avança a posição de fim
+        sem_post(&f->mutex);  // Libera a fila
+
+        // Espera na fila até que o recurso seja liberado
         sem_wait(&f->espera[Pi]);
     }
 }
 
-void termina_uso(int recurso, fila_fifo_t *f) {
-    sem_wait(&f->mutex);
+void termina_uso(fila_fifo_t *f) {
+    sem_wait(&f->mutex);  // Protege o acesso à fila
+
+    // Verifica se há algum processo esperando na fila
     if (f->inicio != f->fim) {
-        int proximo = f->fila[f->inicio];
-        f->inicio = (f->inicio + 1) % MAX_PROCESSOS;
-        sem_post(&f->espera[proximo]);
+        int proximo = f->fila[f->inicio];  // O próximo processo da fila
+        f->inicio = (f->inicio + 1) % MAX_PROCESSOS;  // Avança a posição de início da fila
+        sem_post(&f->espera[proximo]);  // Acorda o próximo processo
     } else {
-        f->usando = 0;
+        f->usando = 0;  // Se não há ninguém esperando, libera o recurso
     }
-    sem_post(&f->mutex);
+
+    sem_post(&f->mutex);  // Libera a fila
 }
 
 // ------------------- FUNÇÃO DO FILHO -------------------
 
-void processo_filho(int Pi, barreira_t *b, fila_fifo_t *f, int recurso) {
+void processo_filho(int Pi, barreira_t *b, fila_fifo_t *f) {
     srand(getpid());
     printf("--Processo: %d chegando na barreira\n", Pi);
     espera_barreira(b);
@@ -105,7 +112,7 @@ void processo_filho(int Pi, barreira_t *b, fila_fifo_t *f, int recurso) {
         sleep(s);
 
         // Tenta iniciar uso
-        inicia_uso(recurso, f, Pi);
+        inicia_uso(f, Pi);
 
         // Uso
         s = 1 + rand() % 3;
@@ -113,7 +120,7 @@ void processo_filho(int Pi, barreira_t *b, fila_fifo_t *f, int recurso) {
         sleep(s);
 
         // Termina uso
-        termina_uso(recurso, f);
+        termina_uso(f);
 
         // Epílogo
         s = 1 + rand() % 3;
@@ -146,14 +153,11 @@ int main() {
     init_barreira(b, MAX_PROCESSOS);
     init_fila(f);
 
-    // Gera número aleatório do recurso (herdado pelos filhos)
-    int recurso = rand() % 100;
-
     // Cria filhos
     for (i = 0; i < MAX_PROCESSOS; i++) {
         pid_t pid = fork();
         if (pid == 0) {
-            processo_filho(i, b, f, recurso);
+            processo_filho(i, b, f);
         } else {
             filhos[i] = pid;
         }
