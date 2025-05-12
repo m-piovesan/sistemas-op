@@ -23,4 +23,4 @@ if [ ! -f "$FILE" ]; then
 fi
 
 # Compila e executa
-gcc "$FILE" -o "$OUTPUT" -lpthread && ./"$OUTPUT"
+gcc "$FILE" -o "$OUTPUT" -lpthread -lrt && ./"$OUTPUT"
